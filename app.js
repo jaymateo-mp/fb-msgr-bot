@@ -44,6 +44,8 @@ const VALIDATION_TOKEN = (process.env.MESSENGER_VALIDATION_TOKEN) ?
 const PAGE_ACCESS_TOKEN = (process.env.MESSENGER_PAGE_ACCESS_TOKEN) ?
   (process.env.MESSENGER_PAGE_ACCESS_TOKEN) :
   config.get('pageAccessToken');
+  
+const FB_GRAPH_URI = 'https://graph.facebook.com/v2.6/me/messages';
 
 if (!(APP_SECRET && VALIDATION_TOKEN && PAGE_ACCESS_TOKEN)) {
   console.error("Missing config values");
@@ -66,7 +68,6 @@ app.get('/webhook', function(req, res) {
   }  
 });
 
-
 /*
  * All callbacks for Messenger are POST-ed. They will be sent to the same
  * webhook. Be sure to subscribe your app to your page to receive callbacks
@@ -87,8 +88,6 @@ app.post('/webhook', function (req, res) {
 
       // Iterate over each messaging event
       pageEntry.messaging.forEach(function(messagingEvent) {
-        //sendAction(messagingEvent.sender.id, 'mark_seen');
-        //sendAction(messagingEvent.sender.id, 'typing_on');
         if (messagingEvent.optin) {
           receivedAuthentication(messagingEvent);
         } else if (messagingEvent.message) {
@@ -209,29 +208,28 @@ function receivedMessage(event) {
     // the text we received.
     switch (messageText) {
       case 'image':
-        sendImageMessage(senderID);
+        prepareMessage(senderID, null, sendImageMessage);
         break;
 
       case 'button':
-        sendButtonMessage(senderID);
+        prepareMessage(senderID, null, sendButtonMessage);
         break;
 
       case 'generic':
-        sendGenericMessage(senderID);
+        prepareMessage(senderID, null, sendGenericMessage);
         break;
 
       case 'receipt':
-        sendReceiptMessage(senderID);
+        prepareMessage(senderID, null, sendReceiptMessage);
         break;
 
       default:
-        sendTextMessage(senderID, messageText);
+        prepareMessage(senderID, messageText, sendTextMessage);
     }
   } else if (messageAttachments) {
-    sendTextMessage(senderID, "Message with attachment received");
+    prepareMessage(senderID, 'Message with attachment received', sendTextMessage);
   }
 }
-
 
 /*
  * Delivery Confirmation Event
@@ -258,7 +256,6 @@ function receivedDeliveryConfirmation(event) {
   console.log("All message before %d were delivered.", watermark);
 }
 
-
 /*
  * Postback Event
  *
@@ -280,29 +277,38 @@ function receivedPostback(event) {
 
   // When a postback is called, we'll send a message back to the sender to 
   // let them know it was successful
-  sendTextMessage(senderID, "Postback called");
+  prepareMessage(senderID, 'Postback called', sendTextMessage);
+/*  
+  var objParams = {recipientId : senderID,
+    messageText : 'Postback called'};
+    
+  sendTextMessage(objParams);
+*/
 }
 
-function sendAction(recipientId, action) {
-  var messageData = {
+function prepareMessage(recipientId, msgText, fnCallback) {
+  var msgData = {
     recipient: {
       id: recipientId
     },
-    sender_action: action
+    sender_action: 'typing_on'
   };
 
-  callSendAPI(messageData);
+  var objParams = {messageData : msgData,
+    messageText : msgText,
+    callback : fnCallback};
+  
+  callSendAPI(objParams);
 }
-
 
 /*
  * Send a message with an using the Send API.
  *
  */
-function sendImageMessage(recipientId) {
-  var messageData = {
+var sendImageMessage = (function (params) {
+  var msgData = {
     recipient: {
-      id: recipientId
+      id: params.recipientId
     },
     message: {
       attachment: {
@@ -314,82 +320,38 @@ function sendImageMessage(recipientId) {
     }
   };
 
-  callSendAPI(messageData);
-}
+  var objParams = {messageData : msgData};
+  
+  callSendAPI(objParams);
+});
 
 /*
  * Send a text message using the Send API.
  *
  */
-function sendTextMessage(recipientId, messageText) {
-  //    uri: 'https://graph.facebook.com/' + recipientId + '/?fields=first_name&access_token=266066173762413|pBWgyFU8a3CsWhC6tqTVxW4IRZs',
-  //  uri: 'https://graph.facebook.com/me/?fields=first_name&access_token=EAACEdEose0cBAGoE0YG4V7IrX5jUxtUtEA57fwMP7vnXG0h1dzBMkUBgHYmLUUOe48oyhdRaLvo7wg37kGNZAbhritBpLPrLDyuqB7CXYgTkk0CsMekcoJuYoni78lL1F80eZB0igBvOJLjzJAUptdNyZATff2Oi4QqE769egZDZD',
-
-  request({
-    uri: 'https://graph.facebook.com/v2.6/' + recipientId + '?access_token=EAACEdEose0cBABIS4LNpaYUikgH5mGOZABk1gCK8V8YPCNtgSyHOwyHfZAG8y5snDWhVNJ4dmvbZB8GXhHP4JKZCCdaZCDS5BMfXZCKyMezLVh09t0EI5tlZBUU2itpZCQtSZBkkZCxgvfnr0BZB8rEv1ZCt6AeN51Lw31ptr8jrZCyOL9QZDZD',
-    method: 'GET'
-  }, function (error, response, body) {
-    var messageData;
-    
-    if (!error && response.statusCode == 200) {
-
-      messageData = {
-        recipient: {
-          id: recipientId
-        },
-        message: {
-          text: messageText
-        }
-      };
-
-      console.log("Successfully sent generic message with id %s to recipient %s", 
-        messageId, recipientId);
-    } else {
-      console.error("Unable to send message.");
-      console.error(response);
-      console.error(error);
-      
-      //first_name = response;
-      //first_name = 'error';
-      
-      messageData = {
-        recipient: {
-          id: recipientId
-        },
-        message: {
-          text: 'error: ' + response.statusCode + ' id: ' + recipientId + ' msg: ' + messageText
-        }
-      };
-    }
-    
-    callSendAPI(messageData);
-    //sendAction(recipientId, 'typing_off');
-  });  
-
-/*
-  var first_name = getUser(recipientId);
-
-  var messageData = {
+var sendTextMessage = (function (params) {
+  var msgData = {
     recipient: {
-      id: recipientId
+      id: params.recipientId
     },
     message: {
-      text: first_name + ': ' + messageText
+      text: params.messageText
     }
   };
 
-  callSendAPI(messageData);
-*/
-}
+  var objParams = {messageData : msgData};
+  
+  callSendAPI(objParams);
+});
 
 /*
  * Send a button message using the Send API.
  *
  */
-function sendButtonMessage(recipientId) {
-  var messageData = {
+var sendButtonMessage = (function (params) {
+  var msgData = {
     recipient: {
-      id: recipientId
+      id: params.recipientId
     },
     message: {
       attachment: {
@@ -411,17 +373,19 @@ function sendButtonMessage(recipientId) {
     }
   };  
 
-  callSendAPI(messageData);
-}
+  var objParams = {messageData : msgData};
+  
+  callSendAPI(objParams);
+});
 
 /*
  * Send a Structured Message (Generic Message type) using the Send API.
  *
  */
-function sendGenericMessage(recipientId) {
-  var messageData = {
+var sendGenericMessage = (function (params) {
+  var msgData = {
     recipient: {
-      id: recipientId
+      id: params.recipientId
     },
     message: {
       attachment: {
@@ -462,20 +426,23 @@ function sendGenericMessage(recipientId) {
     }
   };  
 
-  callSendAPI(messageData);
-}
+  var objParams = {messageData : msgData};
+  
+  callSendAPI(objParams);
+});
 
 /*
  * Send a receipt message using the Send API.
  *
  */
-function sendReceiptMessage(recipientId) {
+//function sendReceiptMessage(recipientId) {
+var sendReceiptMessage = (function (params) {
   // Generate a random receipt ID as the API requires a unique ID
   var receiptId = "order" + Math.floor(Math.random()*1000);
 
-  var messageData = {
+  var msgData = {
     recipient: {
-      id: recipientId
+      id: params.recipientId
     },
     message:{
       attachment: {
@@ -528,32 +495,41 @@ function sendReceiptMessage(recipientId) {
     }
   };
 
-  callSendAPI(messageData);
-}
+  var objParams = {messageData : msgData};
+  
+  callSendAPI(objParams);
+});
 
 /*
  * Call the Send API. The message data goes in the body. If successful, we'll 
  * get the message id in a response 
  *
  */
-function callSendAPI(messageData) {
+function callSendAPI(params) {
   request({
-    uri: 'https://graph.facebook.com/v2.6/me/messages',
+    uri: FB_GRAPH_URI,
     qs: { access_token: PAGE_ACCESS_TOKEN },
     method: 'POST',
-    json: messageData
+    json: params.messageData
 
   }, function (error, response, body) {
+    var recipientId = body.recipient_id;
+    var messageId = body.message_id;
+    
     if (!error && response.statusCode == 200) {
-      var recipientId = body.recipient_id;
-      var messageId = body.message_id;
-
       console.log("Successfully sent generic message with id %s to recipient %s", 
         messageId, recipientId);
     } else {
       console.error("Unable to send message.");
       console.error(response);
       console.error(error);
+    }
+    
+    if(params.callback != null) {
+      var objParams = {recipientId : body.recipient_id,
+        messageText : params.messageText};
+        
+      params.callback(objParams);
     }
   });  
 }
