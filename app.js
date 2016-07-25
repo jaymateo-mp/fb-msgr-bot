@@ -77,7 +77,7 @@ app.get('/webhook', function(req, res) {
  */
 app.post('/webhook', function (req, res) {
   var data = req.body;
-
+  
   // Make sure this is a page subscription
   if (data.object == 'page') {
     // Iterate over each entry
@@ -169,7 +169,6 @@ function receivedAuthentication(event) {
   sendTextMessage(senderID, "Authentication successful");
 }
 
-
 /*
  * Message Event
  *
@@ -221,6 +220,18 @@ function receivedMessage(event) {
 
       case 'receipt':
         prepareMessage(senderID, null, sendReceiptMessage);
+        break;
+
+      case 'websites':
+        prepareMessage(senderID, null, sendWebsiteList);
+        break;
+
+      case 'branch':
+        prepareMessage(senderID, null, sendBranches);
+        break;
+        
+      case 'help':
+        prepareMessage(senderID, null, sendHelpMessage);
         break;
 
       default:
@@ -372,6 +383,97 @@ var sendButtonMessage = (function (params) {
       }
     }
   };  
+
+  var objParams = {messageData : msgData};
+  
+  callSendAPI(objParams);
+});
+
+/*
+ * Send a website list using the Send API.
+ *
+ */
+var sendWebsiteList = (function (params) {
+  var msgData = {
+    recipient: {
+      id: params.recipientId
+    },
+    message: {
+      attachment: {
+        type: "template",
+        payload: {
+          template_type: "button",
+          text: "Manulife Philippines",
+          buttons:[{
+            type: "web_url",
+            url: "http://www.manulife.com.ph/",
+            title: "Manulife Philippines"
+          }, 
+          {
+            type: "web_url",
+            url: "http://www.mymanulife.com.ph/",
+            title: "myManulife Customer Website"
+          }, 
+          {
+            type: "web_url",
+            url: "http://www.manulife-chinabank.com.ph/",
+            title: "Manulife Chinabank"
+          }]
+        }
+      }
+    }
+  };  
+
+  var objParams = {messageData : msgData};
+  
+  callSendAPI(objParams);
+});
+
+/*
+ * Send a MP Branch map using the Send API.
+ *
+ */
+var sendBranches = (function (params) {
+  var msgData = {
+    recipient: {
+      id: params.recipientId
+    },
+    message: {
+      attachment: {
+        type: "template",
+        payload: {
+          template_type: "button",
+          text: 'Manulife Philippines',
+          buttons:[{
+            type: "web_url",
+            url: "https://www.manulife.com.ph/Find-and-Contact-Us",
+            title: "Find and Contact Us"
+          }]
+        }
+      }
+    }
+  };  
+
+  var objParams = {messageData : msgData};
+  
+  callSendAPI(objParams);
+});
+
+/*
+ * Send list of available keyword using the Send API.
+ *
+ */
+var sendHelpMessage = (function (params) {
+  var messageText = 'branch\nwebsites';
+  
+  var msgData = {
+    recipient: {
+      id: params.recipientId
+    },
+    message: {
+      text: messageText
+    }
+  };
 
   var objParams = {messageData : msgData};
   
